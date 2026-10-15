@@ -258,7 +258,8 @@ def cargar_lugares(con, fuentes):
 def lugar(fuente, id_, nombre, lat, lon, datos):
     d = json.loads(datos) if datos else {}
     l = {"id": id_, "nombre": " ".join(nombre.split())[:120], "lat": lat, "lon": lon, "fuentes": FUENTE_BIT[fuente],
-         "fuente": fuente, "tel": "", "fb": "", "ig": "", "web": "", "wa": "", "dir": "", "cats": [], "ica": False}
+         "fuente": fuente, "tel": "", "fb": "", "ig": "", "web": "", "wa": "", "dir": "", "cats": [], "ica": False,
+         "ids": [id_], "origen": []}
     if fuente == "overture":
         if (d.get("estado") or "") in ("permanently_closed", "closed"):
             return None
@@ -271,7 +272,8 @@ def lugar(fuente, id_, nombre, lat, lon, datos):
             cat = categoria_por_nombre(nombre) or cat
         l["cat"] = cat
         l["cats"] = [c for c in [d.get("primaria")] if c]
-        l["conf"] = d.get("confianza") or 0
+        l["origen"] = [f"Overture: {d.get('primaria') or d.get('basica') or 'sin categoría'}"]
+        l["conf"] = l["conf_overture"] = d.get("confianza") or 0
         webs = d.get("webs") or []
         l["ig"] = next((w for w in webs if "instagram.com" in w), "")
         l["wa"] = next((w for w in webs if "wa.me" in w or "whatsapp" in w or "wa.link" in w), "")
@@ -289,6 +291,7 @@ def lugar(fuente, id_, nombre, lat, lon, datos):
             cat = categoria_por_nombre(nombre) or cat
         l["cat"] = cat
         l["cats"] = [c for c in (d.get("cuisine") or "").split(";") if c]
+        l["origen"] = ["OSM: " + next((f"{k}={d[k]}" for k in categorias.OSM_CLAVES if d.get(k)), "")]
         l["tel"] = telefono(d.get("phone") or d.get("contact:phone") or d.get("mobile") or d.get("contact:mobile"))
         l["web"] = d.get("website") or d.get("contact:website") or ""
         l["fb"] = d.get("contact:facebook") or ""
@@ -304,6 +307,7 @@ def lugar(fuente, id_, nombre, lat, lon, datos):
             l["cat"] = categoria_por_nombre(nombre) or l["cat"]
         l["nombre"] = l["nombre"].title() if l["nombre"].isupper() else l["nombre"]
         l["ica"] = True
+        l["origen"] = [f"Medellín: CIIU {d.get('ciiu') or 'sin código'}"]
         l["conf"] = 0.7
         barrio = (d.get("barrio") or "").strip()
         l["dir"] = f"Barrio {barrio.title()}" if barrio and barrio != "0000" else ""
@@ -333,6 +337,10 @@ def fusionar(base, otro):
         base["cat"] = otro["cat"]
     base["cats"] = list(dict.fromkeys(base["cats"] + otro["cats"]))
     base["fuentes"] |= otro["fuentes"]
+    base["ids"] += otro["ids"]
+    if "conf_overture" in otro and "conf_overture" not in base:
+        base["conf_overture"] = otro["conf_overture"]
+    base["origen"] += otro["origen"]
     base["ica"] = base["ica"] or otro["ica"]
     base["conf"] = max(base.get("conf", 0), otro.get("conf", 0))
 
@@ -386,7 +394,7 @@ class Registro:
                 camara = fila["camara_comercio"]
                 self.por_camara[camara][k].append((fila["estado_matricula"], fila["ultimo_ano_renovado"],
                                                    fila["fecha_cancelacion"], fila["razon_social"].strip(),
-                                                   fila["cod_ciiu_act_econ_pri"]))
+                                                   fila["cod_ciiu_act_econ_pri"], fila["matricula"]))
                 self.camaras_de[k].add(camara)
                 n += 1
         print(f"registro: {n} matrículas con un nombre que aparece en el mapa")
@@ -406,10 +414,10 @@ class Registro:
         if activas:
             mejor = max(activas, key=lambda f: f[1] or "0")
             anio = int(mejor[1] or 0) if (mejor[1] or "0").isdigit() else 0
-            return ("al_dia" if anio >= self.anio_vigente else "sin_renovar", anio, mejor[3])
+            return ("al_dia" if anio >= self.anio_vigente else "sin_renovar", anio, mejor[3], mejor[5], camara, mejor[4])
         mejor = max(filas, key=lambda f: f[2] or "0")
         texto = (mejor[2] or mejor[1] or "0")[:4]
-        return ("cancelado", int(texto) if texto.isdigit() else 0, mejor[3])
+        return ("cancelado", int(texto) if texto.isdigit() else 0, mejor[3], mejor[5], camara, mejor[4])
 
 
 def asignar_camaras(registro, por_municipio, centros):
@@ -487,10 +495,9 @@ def anillos(geojson):
     return [[[round(x, 4), round(y, 4)] for x, y in anillo] for poligono in poligonos for anillo in poligono[:1]]
 
 
-def main(fuentes, salida):
+def construir(fuentes):
+    """Los lugares de cada municipio, ya unidos, clasificados y cruzados con el registro mercantil."""
     hoy = datetime.now(ZoneInfo("America/Bogota")).date()
-    version = hoy.isoformat()
-    os.makedirs(f"{salida}/m", exist_ok=True)
     con = duckdb.connect()
     con.execute("SET enable_progress_bar = false; INSTALL spatial; LOAD spatial;")
     municipios(con, fuentes)
@@ -532,7 +539,13 @@ def main(fuentes, salida):
             l["dudosa"] = l["fuentes"] == 1 and puntos[(round(l["lat"], 5), round(l["lon"], 5))] >= 4
             l["registro"] = registro.estado(camaras[codigo], l) if registro and codigo in camaras else None
             estados[l["registro"][0] if l["registro"] else "sin registro"] += 1
+    return con, hoy, por_municipio, estados
 
+
+def main(fuentes, salida):
+    con, hoy, por_municipio, estados = construir(fuentes)
+    version = hoy.isoformat()
+    os.makedirs(f"{salida}/m", exist_ok=True)
     datos_municipios = con.execute(
         "SELECT codigo, nombre, x0, y0, x1, y1, cx, cy, ST_AsGeoJSON(simple) FROM municipio ORDER BY codigo").fetchall()
     indice, limites = [], {}
