@@ -181,6 +181,8 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
   border-radius: 20px 20px 0 0; box-shadow: 0 -6px 28px rgb(15 25 22 / 0.18);
 }
 .hoja[data-vista="lista"] { height: 62%; }
+/* La ficha deja ver el lugar en el mapa, entre la barra superior y la hoja. */
+.hoja[data-vista="ficha"] { height: 60%; }
 .hoja-asa {
   flex: none; height: 22px; border: 0; background: transparent;
   display: grid; place-items: center;

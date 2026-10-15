@@ -443,10 +443,14 @@
     if (!mapa) return;
     mapa.easeTo({ center: [l.lon, l.lat], zoom: Math.max(mapa.getZoom(), zoomMinimo), offset: desplazamiento(), duration: 450 });
   }
+  // Encuadra los resultados cercanos (5 km) para que un lugar rural no aleje el mapa de la ciudad.
   function encuadrarResultados() {
     if (!mapa || !resultados.length || resultados.length === lugares.length) return;
+    const centro = { lat: CENTRO[0], lon: CENTRO[1] };
+    const referencia = ubicacion && distancia(ubicacion, centro) < 15000 ? ubicacion : centro;
+    const cercanos = resultados.filter(({ l }) => distancia(referencia, l) <= 5000);
     const limites = new maplibregl.LngLatBounds();
-    for (const { l } of resultados) limites.extend([l.lon, l.lat]);
+    for (const { l } of cercanos.length ? cercanos : resultados) limites.extend([l.lon, l.lat]);
     requestAnimationFrame(() => mapa.fitBounds(limites, {
       padding: { top: altoBarra() + 16, bottom: altoHoja() + 16, left: 28, right: 28 }, maxZoom: 16, duration: 500,
     }));
@@ -506,7 +510,7 @@
 
   function render() {
     const v = vistaActual();
-    hoja.dataset.vista = v.tipo === 'resumen' || v.tipo === 'lista' ? v.tipo : 'panel';
+    hoja.dataset.vista = ['resumen', 'lista', 'ficha'].includes(v.tipo) ? v.tipo : 'panel';
     document.body.classList.toggle('modo-ubicar', v.tipo === 'ubicar');
     $('#mira').hidden = v.tipo !== 'ubicar';
     const lugar = v.id ? porId.get(v.id) : null;
@@ -1184,9 +1188,12 @@
     primerResultado: () => (resultados[0] ? resultados[0].l.id : null),
     abrir: abrirFicha,
     vista: () => vistaActual().tipo,
+    abierto: () => vistaActual().id || null,
     estado: () => JSON.parse(JSON.stringify(estado)),
     versionDatos: () => datos.version,
     hayMapa: () => !!mapa,
+    zoom: () => (mapa ? mapa.getZoom() : null),
+    zonaLibre: () => ({ arriba: altoBarra(), abajo: innerHeight - altoHoja() }),
     mapaListo: () => !!(mapa && capasListas && mapa.loaded() && mapa.areTilesLoaded()),
     puntoEnPantalla(id) {
       const l = porId.get(id);

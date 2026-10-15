@@ -78,6 +78,8 @@ async function main() {
     const pizzas = await pagina.evaluate(() => Mappi.resultados());
     comprobar(pizzas >= 15 && (await pagina.evaluate(() => Mappi.vista())) === 'resumen', `el plato Pizza muestra ${pizzas} lugares en el mapa`);
     await esperarMapa(pagina);
+    const zoomPizza = await pagina.evaluate(() => Mappi.zoom());
+    comprobar(zoomPizza >= 12, `el mapa encuadra las pizzerías de la ciudad, no las rurales a 25 km (zoom ${zoomPizza.toFixed(1)})`);
     await pagina.screenshot({ path: path.join(docs, 'mappi-pizza-mapa.png') });
     const objetivo = await pagina.evaluate(() => Mappi.primerResultado());
     const punto = await pagina.evaluate((x) => Mappi.puntoEnPantalla(x), objetivo);
@@ -104,6 +106,13 @@ async function main() {
     comprobar((await pagina.evaluate(() => Mappi.vista())) === 'ficha', `abre la ficha de ${nombre}`);
     comprobar(await pagina.isVisible('a:has-text("Cómo llegar")[href^="https://www.google.com/maps/dir/"]'), 'la ficha enlaza la ruta en Google Maps');
     comprobar(await pagina.isVisible('a:has-text("Ir con Waze")[href^="https://waze.com/ul"]'), 'la ficha enlaza la ruta en Waze');
+    await pagina.waitForTimeout(700);
+    const visible = await pagina.evaluate(() => {
+      const zona = Mappi.zonaLibre();
+      const p = Mappi.puntoEnPantalla(Mappi.abierto());
+      return p && p.y > zona.arriba && p.y < zona.abajo;
+    });
+    comprobar(visible, 'con la ficha abierta, el lugar queda visible en el mapa entre la barra y la hoja');
     await esperarMapa(pagina);
     await pagina.screenshot({ path: path.join(docs, 'mappi-ficha.png') });
 
