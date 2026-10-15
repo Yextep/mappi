@@ -723,13 +723,14 @@
     const conNombre = z >= 15;
     // Lejos, un punto por cada 4 píxeles basta y la tesela pesa poco.
     const ocupado = z < 14 ? new Set() : null;
+    const celdaBits = 5;  // 32 unidades: 4 píxeles en teselas de 512
     for (const i of candidatos(z, x, y)) {
       const l = visibles[i];
       const px = Math.round((l._x * n - x) * EXTENSION);
       const py = Math.round((l._y * n - y) * EXTENSION);
       if (px < 0 || px >= EXTENSION || py < 0 || py >= EXTENSION) continue;
       if (ocupado) {
-        const celda = (px >> 6) * 64 + (py >> 6);
+        const celda = (px >> celdaBits) * 128 + (py >> celdaBits);
         if (ocupado.has(celda)) continue;
         ocupado.add(celda);
       }
@@ -813,7 +814,9 @@
     mapa.addControl(new maplibregl.AttributionControl({ compact: false }), 'bottom-right');
     mapa.on('style.load', agregarCapas);
     mapa.on('click', alTocarMapa);
+    // La ubicación o el municipio pudieron llegar antes que el mapa.
     if (ubicacion) dibujarUbicacion(false);
+    if (municipio) encuadrarMunicipio();
   }
   function agregarCapas() {
     const borde = color('--superficie');
@@ -825,7 +828,7 @@
     mapa.addLayer({
       id: 'lugares', type: 'circle', source: 'lugares', 'source-layer': 'lugares', filter: ['!=', ['get', 'e'], 3],
       paint: {
-        'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 2, 12, 3.5, 14, 5.5, 17, 9],
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 9, 1.5, 12, 2.5, 14, 5, 17, 9],
         'circle-color': ['case', ['==', ['get', 'e'], 1], gris, ['==', ['get', 'e'], 2], color('--g-propio'), colores],
         'circle-opacity': ['case', ['==', ['get', 'e'], 1], 0.55, 0.95],
         'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 11, 0.6, 14, 1.6],

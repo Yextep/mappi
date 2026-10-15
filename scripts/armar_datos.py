@@ -546,6 +546,10 @@ def main(fuentes, salida):
             f.write(cuerpo)
         for l in lugares:
             total[l["cat"]] += 1
+        # El centro es la mediana de sus lugares (el casco urbano); sin datos, un punto dentro del municipio.
+        if len(lugares) >= 20:
+            cy = sorted(l["lat"] for l in lugares)[len(lugares) // 2]
+            cx = sorted(l["lon"] for l in lugares)[len(lugares) // 2]
         indice.append({"c": codigo, "n": nombre, "d": DEPARTAMENTOS.get(codigo[:2], ""), "lat": round(cy, 4),
                        "lon": round(cx, 4), "caja": [round(x0, 4), round(y0, 4), round(x1, 4), round(y1, 4)],
                        "total": len(lugares), "kb": math.ceil(len(cuerpo) / 1024)})

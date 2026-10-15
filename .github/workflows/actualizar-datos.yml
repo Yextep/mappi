@@ -71,4 +71,6 @@ jobs:
             exit 0
           fi
           git commit -m "Actualizar el índice de municipios ($(date -u +%Y-%m-%d))"
+          # main pudo avanzar mientras se armaban los datos.
+          git pull --rebase -q
           git push
