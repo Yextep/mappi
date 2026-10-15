@@ -1,7 +1,7 @@
 {
-  "version": "1.0",
-  "codigo": 1,
-  "apk": "https://github.com/Yextep/mappi/releases/download/v1.0/Mappi.apk",
-  "notas": "Primera versión.",
+  "version": "2.0",
+  "codigo": 3,
+  "apk": "https://github.com/Yextep/mappi/releases/download/v2.0/Mappi.apk",
+  "notas": "Todos los negocios de Colombia por municipio, categorías y calificaciones personales.",
   "codigo_minimo": 0
 }
