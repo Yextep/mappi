@@ -135,6 +135,22 @@ public class MappiSmokeTest {
     }
 
     @Test
+    public void avisaDeUnaVersionNueva() throws Exception {
+        try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
+            // Primero termina la consulta real a version.json, para que no pise el manifiesto de prueba.
+            exigir(escenario, "!!(window.Mappi && Mappi.listo) && Mappi.versionRevisada()");
+            assertEquals("\"" + BuildConfig.VERSION_NAME + "\"", evaluar(escenario, "Mappi.versionApp().nombre"));
+            assertEquals(String.valueOf(BuildConfig.VERSION_CODE), evaluar(escenario, "Mappi.versionApp().codigo"));
+            assertEquals("true", evaluar(escenario, "Mappi.probarManifiesto({version: '9.9', codigo: 999, "
+                    + "apk: 'https://github.com/Yextep/mappi/releases/download/v9.9/Mappi.apk', notas: 'Versión de prueba.'})"));
+            exigir(escenario, "Mappi.vista() === 'version' && !!document.querySelector('a[href$=\"/v9.9/Mappi.apk\"]')");
+            captura("actualizacion");
+            escenario.onActivity(MainActivity::onBackPressed);
+            exigir(escenario, "Mappi.vista() === 'resumen'");
+        }
+    }
+
+    @Test
     public void bloqueaServidoresNoPermitidos() throws Exception {
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
             exigir(escenario, "!!(window.Mappi && Mappi.listo)");

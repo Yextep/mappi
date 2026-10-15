@@ -8,6 +8,8 @@ Autor: Daniel Lezcano (Yextep).
 
 Descarga `Mappi.apk` desde las [releases](https://github.com/Yextep/mappi/releases/latest) e instálalo. Requiere Android 7.0 o posterior. Todas las versiones se firman con la misma clave, así que cada versión nueva se instala encima de la anterior sin perder favoritos ni visitas.
 
+Desde la 1.1, Mappi avisa sola cuando hay una versión nueva: al abrirse consulta [`version.json`](version.json) y, si hay una más reciente, muestra «Mappi X está disponible» con **Descargar** y **Más tarde**. Si eliges «Más tarde», no vuelve a preguntar en tres días, pero el menú marca la versión nueva con un punto. La 1.0 no tiene este aviso: hay que instalar la 1.1 a mano una vez.
+
 ## Funciones
 
 - **Mapa** de Barrancabermeja con tu ubicación y un punto por lugar, de un color según el tipo: restaurante, comida rápida, café y postres, o bar. Al acercarte aparecen los nombres.
@@ -41,13 +43,14 @@ El mapa es de [OpenFreeMap](https://openfreemap.org): gratis, sin clave de API, 
 - `app/src/main/java/com/mappi/app/MainActivity.java`: el WebView, los permisos de ubicación, «Compartir», las rutas externas y el respaldo.
 - `datos/lugares.json`: la lista que viaja en el APK y que se actualiza cada mes.
 - `scripts/descargar_fuentes.py` y `scripts/unir_fuentes.py`: arman la lista.
+- `version.json` y `scripts/publicar_version.py`: el aviso de versión nueva.
 
 ## Compilar y probar
 
 GitHub Actions compila con cada cambio en `main` ([Compilar Mappi](.github/workflows/mappi-apk.yml)):
 
-1. `scripts/prueba_navegador.cjs` recorre la interfaz en Chromium con tamaño de celular: búsqueda por plato, tocar un punto del mapa, ficha, favoritos y visitas después de recargar, video compartido, lugar propio, filtros, ocultar y restaurar.
-2. Compila el APK y ejecuta `MappiSmokeTest` en un emulador Android 15: mapa, búsqueda, ficha y botón atrás; favoritos entre aperturas; video compartido y bloqueo de servidores.
+1. `scripts/prueba_navegador.cjs` recorre la interfaz en Chromium con tamaño de celular: búsqueda por plato, tocar un punto del mapa, ficha, favoritos y visitas después de recargar, video compartido, lugar propio, filtros, ocultar y restaurar, y el aviso de versión nueva (normal y obligatoria).
+2. Compila el APK y ejecuta `MappiSmokeTest` en un emulador Android 15: mapa, búsqueda, ficha y botón atrás; favoritos entre aperturas; video compartido; aviso de versión nueva y bloqueo de servidores.
 3. Firma `Mappi.apk` y guarda el APK, los resultados y las capturas como artefactos.
 
 Para regenerar la lista a mano:
@@ -58,4 +61,26 @@ python scripts/descargar_fuentes.py fuentes
 python scripts/unir_fuentes.py fuentes datos/lugares.json docs/lugares.csv
 ```
 
-Para una versión nueva, sube `versionCode` y `versionName` en `app/build.gradle` y `VERSION_APP` en `app/src/main/assets/web/app.js`.
+## Publicar una versión nueva
+
+1. Sube `versionCode` (un número entero, siempre mayor) y `versionName` en `app/build.gradle`, y haz push a `main`.
+2. Espera a que «Compilar Mappi» termine en verde y anota el número de la ejecución.
+3. Publícala:
+
+   ```sh
+   python scripts/publicar_version.py publicar RUN_ID --notas "Qué cambió, en una o dos frases"
+   git pull
+   ```
+
+   El script comprueba que el APK tiene la firma de Mappi, crea la release `vX.Y` con `Mappi.apk` y cambia `version.json`. Desde ese momento, las apps instaladas ofrecen la descarga la próxima vez que se abran.
+
+Otras órdenes: `estado` muestra el `version.json` publicado; `obligatoria` exige la última versión (las anteriores muestran solo el aviso, sin «Más tarde», hasta actualizar) y `opcional` quita esa exigencia. `--obligatoria` al publicar hace lo mismo en un paso.
+
+| Campo de `version.json` | Efecto en las apps instaladas |
+|---|---|
+| `version`, `codigo` | Última versión publicada. Si `codigo` es mayor que el `versionCode` instalado, aparece el aviso. |
+| `apk` | Descarga de esa versión. Solo se aceptan enlaces a las releases de este repositorio. |
+| `notas` | Novedades que se muestran en el aviso. |
+| `codigo_minimo` | Las versiones con un código menor quedan en el aviso hasta actualizar. |
+
+La dirección de `version.json` va dentro de cada APK instalado: el repositorio debe seguir siendo público y conservar su nombre y el archivo su ruta.

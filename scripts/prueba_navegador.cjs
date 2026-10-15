@@ -43,6 +43,7 @@ async function abrir(navegador, url, opciones = {}) {
   pagina.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errores.push(m.text()); });
   // La lista publicada en GitHub no participa en la prueba: se usa la incluida en la app.
   await pagina.route('https://raw.githubusercontent.com/**', (ruta) => ruta.fulfill({ status: 404, body: '' }));
+  if (opciones.preparar) await opciones.preparar(pagina);
   await pagina.goto(url);
   await pagina.waitForFunction(() => window.Mappi && window.Mappi.listo, null, { timeout: 15000 });
   return { contexto, pagina, errores };
@@ -189,6 +190,44 @@ async function main() {
     await oscuro.pagina.screenshot({ path: path.join(docs, 'mappi-oscuro.png') });
     comprobar(oscuro.errores.length === 0, 'el tema oscuro carga sin errores');
     await oscuro.contexto.close();
+
+    // Aviso de versión nueva: se simula el APK 1.1 y un version.json publicado con la 1.2.
+    const manifiesto = {
+      version: '1.2', codigo: 3, apk: 'https://github.com/Yextep/mappi/releases/download/v1.2/Mappi.apk',
+      notas: 'Fotos de la carta en la ficha.', codigo_minimo: 0,
+    };
+    const conVersion = (m) => async (pagina) => {
+      await pagina.addInitScript(() => { window.MappiAndroid = { version: () => '{"nombre":"1.1","codigo":2}' }; });
+      await pagina.route('https://raw.githubusercontent.com/Yextep/mappi/main/version.json',
+        (ruta) => ruta.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(m) }));
+    };
+    const nueva = await abrir(navegador, url, { preparar: conVersion(manifiesto) });
+    await nueva.pagina.waitForFunction(() => Mappi.versionRevisada());
+    comprobar((await nueva.pagina.evaluate(() => Mappi.vista())) === 'version'
+      && await nueva.pagina.isVisible(`a:has-text("Descargar")[href="${manifiesto.apk}"]`), 'al abrir la app avisa de Mappi 1.2 con su enlace de descarga');
+    comprobar(await nueva.pagina.isVisible('.notas-version:has-text("Fotos de la carta en la ficha.")'), 'el aviso muestra las novedades');
+    await nueva.pagina.screenshot({ path: path.join(docs, 'mappi-actualizacion.png') });
+    await nueva.pagina.click('button:has-text("Más tarde")');
+    comprobar((await nueva.pagina.evaluate(() => Mappi.vista())) === 'resumen', '«Más tarde» cierra el aviso');
+    await nueva.pagina.reload();
+    await nueva.pagina.waitForFunction(() => window.Mappi && Mappi.listo && Mappi.versionRevisada());
+    comprobar((await nueva.pagina.evaluate(() => Mappi.vista())) === 'resumen' && await nueva.pagina.isVisible('#abrir-menu.con-novedad'),
+      'después de «Más tarde» no insiste al abrir, pero el botón del menú lleva un punto');
+    await nueva.pagina.click('#abrir-menu');
+    comprobar(await nueva.pagina.isVisible('.novedad:has-text("Mappi 1.2 está disponible")'), 'el menú ofrece la versión nueva');
+    comprobar(!(await nueva.pagina.evaluate((m) => Mappi.probarManifiesto({ ...m, apk: 'https://example.com/Mappi.apk' }), manifiesto))
+      && (await nueva.pagina.evaluate(() => Mappi.nuevaVersion().apk)) === manifiesto.apk, 'ignora un version.json que descarga de otro sitio');
+    comprobar(nueva.errores.length === 0, 'el aviso de versión no produce errores');
+    await nueva.contexto.close();
+
+    const obligatoria = await abrir(navegador, url, { preparar: conVersion({ ...manifiesto, codigo_minimo: 3 }) });
+    await obligatoria.pagina.waitForFunction(() => Mappi.versionRevisada());
+    comprobar((await obligatoria.pagina.evaluate(() => Mappi.vista())) === 'version'
+      && !(await obligatoria.pagina.isVisible('button:has-text("Más tarde")')), 'una actualización obligatoria no se puede posponer');
+    comprobar(!(await obligatoria.pagina.evaluate(() => Mappi.atras()))
+      && (await obligatoria.pagina.evaluate(() => Mappi.buscar('pizza') >= 0 && Mappi.vista())) === 'version', 'ni atrás ni la búsqueda salen del aviso obligatorio');
+    await obligatoria.pagina.screenshot({ path: path.join(docs, 'mappi-obligatoria.png') });
+    await obligatoria.contexto.close();
   } finally {
     await navegador.close();
     http_.close();

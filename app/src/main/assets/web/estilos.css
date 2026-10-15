@@ -139,6 +139,12 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
   border: 0; border-radius: 12px; background: transparent; color: var(--texto-2);
 }
 .boton-icono:active { background: var(--superficie-2); }
+/* Punto en el menú cuando hay una versión nueva de la app. */
+.boton-icono.con-novedad { position: relative; }
+.boton-icono.con-novedad::after {
+  content: ""; position: absolute; top: 9px; right: 9px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--brasa); box-shadow: 0 0 0 2px var(--superficie);
+}
 .chips {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
   margin: 0 -12px; padding: 0 12px 6px;
@@ -259,6 +265,8 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
 .cabecera-panel .tipo { color: var(--texto-2); font-size: 13px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .cabecera-panel .tipo .punto { display: inline-block; width: 10px; height: 10px; margin: 0 6px 0 0; vertical-align: 0; }
 .cabecera-panel .espacio { flex: 1; }
+/* Sin botón a la izquierda (actualización obligatoria) el título se alinea con el texto. */
+.cabecera-panel .tipo:first-child { padding-left: 8px; }
 h2 { margin: 0 0 6px; font-size: 23px; line-height: 1.2; text-wrap: balance; overflow-wrap: anywhere; }
 h3 {
   margin: 20px 0 8px; font-size: 12px; font-weight: 700; color: var(--texto-2);
@@ -346,6 +354,21 @@ h3 {
 .interruptor small { display: block; color: var(--texto-2); font-size: 13px; }
 .texto-panel { color: var(--texto-2); margin: 4px 0 0; }
 .texto-panel strong { color: var(--texto); }
+.novedad {
+  display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px;
+  border-radius: 12px; background: var(--brasa-suave);
+}
+.novedad span { flex: 1; min-width: 0; }
+.novedad small { display: block; color: var(--texto-2); font-size: 13px; }
+.notas-version {
+  margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--brasa); border-radius: 0 12px 12px 0;
+  background: var(--superficie-2); white-space: pre-line; overflow-wrap: anywhere;
+}
+.notas-version + .texto-panel { margin-top: 12px; }
+/* Una actualización obligatoria tapa toda la app hasta instalarla. */
+.obligatoria .hoja { top: 0; max-height: none; border-radius: 0; }
+.obligatoria .hoja-asa { visibility: hidden; }
+.obligatoria #hoja-contenido { padding-top: 12vh; }
 .url-compartida {
   margin-top: 8px; padding: 10px 12px; border-radius: 12px; background: var(--superficie-2);
   font-size: 13px; overflow-wrap: anywhere; color: var(--texto-2);

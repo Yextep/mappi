@@ -9,6 +9,8 @@ on:
       - 'datos/**'
       - 'docs/**'
       - 'README.md'
+      # Lo cambia scripts/publicar_version.py al publicar un APK ya compilado.
+      - 'version.json'
 
 permissions:
   contents: read

@@ -244,8 +244,13 @@ public final class MainActivity extends Activity {
         navegador.evaluateJavascript("window.Mappi && Mappi.recibirCompartido(" + JSONObject.quote(texto) + ")", null);
     }
 
-    // Lo único que la página puede pedirle a Android: guardar un respaldo donde el usuario elija.
+    // Lo único que la página puede pedirle a Android: qué versión está instalada y guardar un respaldo donde el usuario elija.
     public final class Puente {
+        @JavascriptInterface
+        public String version() {
+            return "{\"nombre\":" + JSONObject.quote(BuildConfig.VERSION_NAME) + ",\"codigo\":" + BuildConfig.VERSION_CODE + "}";
+        }
+
         @JavascriptInterface
         public void guardarRespaldo(String nombre, String json) {
             if (json == null || json.length() > MAXIMO_RESPALDO) return;

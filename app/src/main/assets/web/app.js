@@ -7,7 +7,10 @@
   const CLAVE_ESTADO = 'mappi.estado.v1';
   const CLAVE_DATOS = 'mappi.datos.v1';
   const CLAVE_REVISION = 'mappi.revision.v1';
-  const VERSION_APP = '1.0';
+  // La escribe scripts/publicar_version.py. Las apps instaladas la consultan siempre aquí: no cambiar esta dirección.
+  const MANIFIESTO = 'https://raw.githubusercontent.com/Yextep/mappi/main/version.json';
+  const DESCARGAS = 'https://github.com/Yextep/mappi/releases/download/';
+  const CLAVE_POSPUESTA = 'mappi.pospuesta.v1';
   const CENTRO = [7.0655, -73.8547];
   const UN_DIA = 24 * 60 * 60 * 1000;
   const POR_PAGINA = 60;
@@ -73,6 +76,9 @@
   let pila = [];
   let pagina = POR_PAGINA;
   let listo = false;
+  const app = versionInstalada();
+  let nuevaVersion = null;
+  let versionRevisada = false;
   const pendientesCompartidos = [];
 
   // ---------- utilidades ----------
@@ -211,6 +217,64 @@
     } catch (e) {
       if (manual) aviso('No se pudo buscar la actualización. Revisa la conexión a internet.');
     }
+  }
+
+  // ---------- versiones nuevas de la app ----------
+  // El APK dice qué versión es; en el navegador de las pruebas no hay nada que actualizar.
+  function versionInstalada() {
+    try {
+      const v = JSON.parse(window.MappiAndroid.version());
+      if (typeof v.nombre === 'string' && Number.isInteger(v.codigo) && v.codigo > 0) return v;
+    } catch (e) { /* fuera de Android */ }
+    return { nombre: '', codigo: 0 };
+  }
+  // Solo se aceptan descargas de las releases del repositorio; Android además exige la misma firma para instalar encima.
+  function aplicarManifiesto(m) {
+    if (!app.codigo || !m || typeof m.version !== 'string' || !/^\d+(\.\d+){0,3}$/.test(m.version)
+      || !Number.isInteger(m.codigo) || typeof m.apk !== 'string' || !m.apk.startsWith(DESCARGAS) || !m.apk.endsWith('.apk')) return false;
+    nuevaVersion = m.codigo > app.codigo ? {
+      version: m.version, codigo: m.codigo, apk: m.apk,
+      notas: typeof m.notas === 'string' ? m.notas.trim().slice(0, 500) : '',
+      obligatoria: Number.isInteger(m.codigo_minimo) && app.codigo < m.codigo_minimo,
+    } : null;
+    const boton = $('#abrir-menu');
+    boton.classList.toggle('con-novedad', !!nuevaVersion);
+    boton.setAttribute('aria-label', nuevaVersion ? 'Hay una versión nueva de Mappi. Datos, respaldo y lugares ocultos' : 'Datos, respaldo y lugares ocultos');
+    return true;
+  }
+  async function revisarVersion(manual) {
+    if (!app.codigo) return;
+    try {
+      const respuesta = await fetch(MANIFIESTO, { cache: 'no-store' });
+      if (!respuesta.ok) throw new Error(`HTTP ${respuesta.status}`);
+      if (!aplicarManifiesto(await respuesta.json())) throw new Error('version.json no válido');
+      ofrecerVersion(manual);
+    } catch (e) {
+      // Sin conexión: se revisa otra vez la próxima vez que se abra la app.
+    } finally {
+      versionRevisada = true;
+    }
+  }
+  // Al abrir la app el aviso aparece solo si no hay otra cosa en pantalla y no se pospuso hace poco.
+  function ofrecerVersion(manual) {
+    if (!nuevaVersion || vistaActual().tipo === 'version') return;
+    if (nuevaVersion.obligatoria) {
+      pila = [{ tipo: 'version' }];
+      render();
+      return;
+    }
+    if (!manual) {
+      let pospuesta = null;
+      try { pospuesta = JSON.parse(localStorage.getItem(CLAVE_POSPUESTA)); } catch (e) { /* nada pospuesto */ }
+      if (pila.length || (pospuesta && pospuesta.codigo === nuevaVersion.codigo && Date.now() < pospuesta.hasta)) return;
+    }
+    mostrar({ tipo: 'version' });
+  }
+  function posponerVersion() {
+    try {
+      localStorage.setItem(CLAVE_POSPUESTA, JSON.stringify({ codigo: nuevaVersion.codigo, hasta: Date.now() + 3 * UN_DIA }));
+    } catch (e) { /* se vuelve a ofrecer en la próxima apertura */ }
+    atras();
   }
 
   // ---------- búsqueda y filtros ----------
@@ -499,7 +563,8 @@
     render();
   }
   function atras() {
-    if (!pila.length) return false;
+    // Con una actualización obligatoria, atrás deja que Android cierre la app.
+    if (!pila.length || (nuevaVersion && nuevaVersion.obligatoria)) return false;
     pila.pop();
     render();
     return true;
@@ -509,7 +574,9 @@
   }
 
   function render() {
+    if (nuevaVersion && nuevaVersion.obligatoria && vistaActual().tipo !== 'version') pila = [{ tipo: 'version' }];
     const v = vistaActual();
+    document.body.classList.toggle('obligatoria', v.tipo === 'version' && !!nuevaVersion && nuevaVersion.obligatoria);
     hoja.dataset.vista = ['resumen', 'lista', 'ficha'].includes(v.tipo) ? v.tipo : 'panel';
     document.body.classList.toggle('modo-ubicar', v.tipo === 'ubicar');
     $('#mira').hidden = v.tipo !== 'ubicar';
@@ -518,9 +585,9 @@
     const dibujar = {
       resumen: htmlResumen, lista: htmlResumen, ficha: () => htmlFicha(lugar), visita: () => htmlVisita(lugar),
       filtros: htmlFiltros, menu: htmlMenu, compartido: () => htmlCompartido(v), ubicar: htmlUbicar,
-      nuevo: () => htmlNuevo(v), restaurar: () => htmlRestaurar(v), ocultos: htmlOcultos,
+      nuevo: () => htmlNuevo(v), restaurar: () => htmlRestaurar(v), ocultos: htmlOcultos, version: htmlVersion,
     }[v.tipo];
-    if ((v.tipo === 'ficha' || v.tipo === 'visita') && !lugar) {
+    if (((v.tipo === 'ficha' || v.tipo === 'visita') && !lugar) || (v.tipo === 'version' && !nuevaVersion)) {
       pila.pop();
       render();
       return;
@@ -753,11 +820,14 @@
   function htmlMenu() {
     const ocultos = Object.keys(estado.cerrados).length;
     return `
-      <div class="cabecera-panel"><button type="button" class="boton-icono" data-accion="atras" aria-label="Volver">${icono('atras')}</button><span class="tipo">Mappi ${VERSION_APP}</span></div>
+      <div class="cabecera-panel"><button type="button" class="boton-icono" data-accion="atras" aria-label="Volver">${icono('atras')}</button><span class="tipo">Mappi${app.nombre ? ` ${esc(app.nombre)}` : ''}</span></div>
+      ${nuevaVersion ? `<div class="novedad">
+        <span><strong>Mappi ${esc(nuevaVersion.version)} está disponible</strong><small>Tienes la versión ${esc(app.nombre)}.</small></span>
+        <button type="button" class="boton primario pequeno" data-accion="ver-version">Ver</button></div>` : ''}
       <h3>Lista de lugares</h3>
       <p class="texto-panel"><strong>${plural(datos.lugares.length, 'lugar', 'lugares')}</strong>, actualizada el ${fecha(datos.version)}${estado.propios.length ? `, más ${plural(estado.propios.length, 'agregado', 'agregados')} por ti` : ''}.
         Cada mes se revisa otra vez con Facebook, OpenStreetMap y el registro mercantil.</p>
-      <div class="fila-botones acciones"><button type="button" class="boton suave ancho" data-accion="actualizar">Buscar actualización</button></div>
+      <div class="fila-botones acciones"><button type="button" class="boton suave ancho" data-accion="actualizar">Buscar actualizaciones</button></div>
 
       <h3>Lugares que marcaste como cerrados</h3>
       <p class="texto-panel">${ocultos ? plural(ocultos, 'lugar oculto', 'lugares ocultos') : 'Ninguno.'}</p>
@@ -771,7 +841,23 @@
       </div>
 
       <h3>Fuentes</h3>
-      <p class="texto-panel">${(datos.fuentes || []).map(esc).join('<br>')}<br>Mapa: © OpenStreetMap, © CARTO.</p>`;
+      <p class="texto-panel">${(datos.fuentes || []).map(esc).join('<br>')}<br>Mapa: OpenFreeMap, © OpenMapTiles, © OpenStreetMap.</p>`;
+  }
+
+  function htmlVersion() {
+    const n = nuevaVersion;
+    return `
+      <div class="cabecera-panel">${n.obligatoria ? '' : `<button type="button" class="boton-icono" data-accion="atras" aria-label="Cerrar">${icono('x')}</button>`}<span class="tipo">Actualización</span></div>
+      <h2>Mappi ${esc(n.version)} está disponible</h2>
+      <p class="texto-panel">${n.obligatoria
+        ? `La versión ${esc(app.nombre)} ya no funciona. Actualiza para seguir usando Mappi.`
+        : `Tienes la versión ${esc(app.nombre)}.`}</p>
+      ${n.notas ? `<p class="notas-version">${esc(n.notas)}</p>` : ''}
+      <p class="texto-panel">Se descarga de GitHub. Abre el archivo y toca «Actualizar»: se instala encima y conservas tus favoritos, visitas y lugares.</p>
+      <div class="fila-botones acciones">
+        <a class="boton primario ancho" href="${esc(n.apk)}" target="_blank" rel="noopener">${icono('descargar')}Descargar</a>
+        ${n.obligatoria ? '' : '<button type="button" class="boton ancho" data-accion="posponer-version">Más tarde</button>'}
+      </div>`;
   }
 
   function htmlOcultos() {
@@ -992,7 +1078,12 @@
         } else aviso(texto);
         break;
       }
-      case 'actualizar': buscarActualizacion(true); break;
+      case 'actualizar':
+        buscarActualizacion(true);
+        revisarVersion(true);
+        break;
+      case 'ver-version': mostrar({ tipo: 'version' }); break;
+      case 'posponer-version': posponerVersion(); break;
       case 'ver-ocultos': mostrar({ tipo: 'ocultos' }); break;
       case 'restaurar-oculto':
         delete estado.cerrados[boton.dataset.id];
@@ -1191,6 +1282,15 @@
     abierto: () => vistaActual().id || null,
     estado: () => JSON.parse(JSON.stringify(estado)),
     versionDatos: () => datos.version,
+    versionApp: () => ({ ...app }),
+    nuevaVersion: () => (nuevaVersion ? { ...nuevaVersion } : null),
+    versionRevisada: () => versionRevisada || !app.codigo,
+    // Las pruebas entregan un version.json sin publicarlo.
+    probarManifiesto(m) {
+      if (!aplicarManifiesto(m)) return false;
+      ofrecerVersion(false);
+      return !!nuevaVersion;
+    },
     hayMapa: () => !!mapa,
     zoom: () => (mapa ? mapa.getZoom() : null),
     zonaLibre: () => ({ arriba: altoBarra(), abajo: innerHeight - altoHoja() }),
@@ -1213,6 +1313,7 @@
     while (pendientesCompartidos.length) recibirCompartido(pendientesCompartidos.shift());
     ubicarme(false);
     buscarActualizacion(false);
+    revisarVersion(false);
   }).catch(() => {
     contenido.innerHTML = '<div class="vacio"><strong>No se pudo cargar la lista de lugares</strong>Cierra y vuelve a abrir Mappi.</div>';
   });
