@@ -18,6 +18,7 @@
   --alerta: #b0261d;
   --alerta-suave: #fbe3e0;
   --fav: #d81b58;
+  --estrella: #e8a200;
   --g-restaurante: #d2441b;
   --g-rapida: #c88700;
   --g-cafe: #8b5a3b;
@@ -49,6 +50,7 @@
     --alerta: #ff8c82;
     --alerta-suave: #3b1a17;
     --fav: #ff5c8d;
+    --estrella: #ffc94d;
     --g-restaurante: #ff6c3f;
     --g-rapida: #f2b630;
     --g-cafe: #cf9a77;
@@ -157,6 +159,10 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
   font-size: 14px; font-weight: 500; white-space: nowrap;
 }
 .chip[aria-pressed="true"] { background: var(--brasa); border-color: var(--brasa); color: var(--sobre-brasa); }
+.chip { display: inline-flex; align-items: center; gap: 7px; }
+.chip .punto { width: 9px; height: 9px; margin: 0; box-shadow: none; }
+.chip[aria-pressed="true"] .punto { background: var(--sobre-brasa); }
+#chips-platos .chip { height: 32px; font-size: 13px; }
 
 /* Botones flotantes */
 .flotantes {
@@ -177,6 +183,7 @@ input[type="search"]::-webkit-search-cancel-button { display: none; }
 }
 .mira .icono { width: 44px; height: 44px; stroke-width: 1.8; fill: var(--superficie); filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35)); }
 .modo-ubicar .barra, .modo-ubicar .flotantes { visibility: hidden; }
+.hoja-alta .flotantes { visibility: hidden; }
 
 /* Hoja inferior */
 .hoja {
@@ -353,6 +360,45 @@ h3 {
 .interruptor input { width: 22px; height: 22px; margin: 2px 0 0; accent-color: var(--brasa); flex: none; }
 .interruptor small { display: block; color: var(--texto-2); font-size: 13px; }
 .texto-panel { color: var(--texto-2); margin: 4px 0 0; }
+.nota.alerta { color: var(--alerta); }
+
+/* Municipio abierto */
+.municipio-actual {
+  width: 100%; display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 8px 10px;
+  border: 0; border-radius: 12px; background: var(--superficie-2); text-align: left;
+}
+.municipio-actual .icono { color: var(--brasa); }
+.municipio-actual span { flex: 1; min-width: 0; }
+.municipio-actual strong { display: block; font-size: 15px; }
+.municipio-actual small { display: block; color: var(--texto-2); font-size: 12px; }
+.girando {
+  flex: none; width: 20px; height: 20px; border-radius: 50%;
+  border: 3px solid var(--borde); border-top-color: var(--brasa); animation: girar 0.8s linear infinite;
+}
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* Calificación personal */
+.estrellas { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.estrella {
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border: 0; border-radius: 12px; background: transparent; color: var(--borde);
+}
+.estrella .icono { width: 30px; height: 30px; stroke-width: 1.6; }
+.estrella[aria-pressed="true"] { color: var(--estrella); }
+.estrella[aria-pressed="true"] .icono { fill: var(--estrella); }
+.estrellas-texto { margin-left: 8px; color: var(--texto-2); font-size: 14px; font-weight: 600; }
+.comentario { display: grid; gap: 8px; margin-top: 8px; }
+.comentario textarea, .campo-plato {
+  width: 100%; padding: 10px 12px; border: 1px solid var(--borde); border-radius: 12px;
+  background: var(--superficie-2); font-size: 15px; resize: vertical;
+}
+.campo-plato { flex: 1 1 160px; min-height: 40px; padding: 0 12px; }
+.estrellas-mini { display: inline-flex; gap: 1px; flex: none; }
+.estrellas-mini .icono { width: 14px; height: 14px; stroke-width: 2; color: var(--borde); }
+.estrellas-mini .icono.llena { color: var(--estrella); fill: var(--estrella); }
+.item-calificacion { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.item-nota { color: var(--texto-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fila-botones.orden { margin: 8px 0 0; }
 .texto-panel strong { color: var(--texto); }
 .novedad {
   display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px;

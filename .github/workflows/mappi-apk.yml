@@ -40,11 +40,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Traer los datos publicados
+        uses: actions/checkout@v4
+        with:
+          ref: datos
+          path: datos-rama
       - name: Probar la interfaz en Chromium
         run: |
           npm install --no-save --no-package-lock playwright@1.63.0
           npx playwright install --with-deps chromium
-          node scripts/prueba_navegador.cjs
+          node scripts/prueba_navegador.cjs datos-rama
       - name: Compilar APK
         run: |
           chmod +x gradlew

@@ -26,6 +26,9 @@ import static org.junit.Assert.fail;
 
 @RunWith(AndroidJUnit4.class)
 public class MappiSmokeTest {
+    // El emulador está en Barrancabermeja: la app abre ese municipio con la ubicación.
+    private static final String LISTO = "!!(window.Mappi && Mappi.listo) && Mappi.municipio() === '68081' && !Mappi.cargando()";
+
     private String evaluar(ActivityScenario<MainActivity> escenario, String codigo) throws Exception {
         CountDownLatch listo = new CountDownLatch(1);
         AtomicReference<String> resultado = new AtomicReference<>("");
@@ -79,9 +82,9 @@ public class MappiSmokeTest {
     @Test
     public void muestraElMapaBuscaYAbreUnaFicha() throws Exception {
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
-            exigir(escenario, "!!(window.Mappi && Mappi.listo)");
-            assertTrue("La lista incluida debe tener más de 600 lugares",
-                    Integer.parseInt(evaluar(escenario, "Mappi.totalLugares()")) > 600);
+            exigir(escenario, LISTO);
+            assertTrue("Barrancabermeja debe tener más de 2.500 lugares",
+                    Integer.parseInt(evaluar(escenario, "Mappi.totalLugares()")) > 2500);
             exigir(escenario, "Mappi.hayMapa()");
             if (!esperar(escenario, "Mappi.mapaListo()", 45)) System.out.println("El mapa base no terminó de cargar a tiempo");
             captura("mapa");
@@ -106,16 +109,19 @@ public class MappiSmokeTest {
     public void guardaFavoritosEntreAperturas() throws Exception {
         String id;
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
-            exigir(escenario, "!!(window.Mappi && Mappi.listo)");
+            exigir(escenario, LISTO);
             id = evaluar(escenario, "Mappi.buscar('hamburguesa') && Mappi.primerResultado()");
             evaluar(escenario, "Mappi.abrir(" + id + ")");
             exigir(escenario, "!!document.querySelector('button[data-accion=favorito]')");
             evaluar(escenario, "document.querySelector('button[data-accion=favorito]').click()");
             exigir(escenario, "!!Mappi.estado().favoritos[" + id + "]");
+            evaluar(escenario, "document.querySelector('button.estrella[data-n=\"5\"]').click()");
+            exigir(escenario, "Mappi.estado().calificaciones[" + id + "].estrellas === 5");
         }
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
-            exigir(escenario, "!!(window.Mappi && Mappi.listo)");
+            exigir(escenario, LISTO);
             assertEquals("true", evaluar(escenario, "!!Mappi.estado().favoritos[" + id + "]"));
+            assertEquals("5", evaluar(escenario, "Mappi.estado().calificaciones[" + id + "].estrellas"));
             evaluar(escenario, "document.querySelector('button[data-vista=favoritos]').click()");
             exigir(escenario, "Mappi.resultados() === 1");
         }
@@ -128,7 +134,7 @@ public class MappiSmokeTest {
                 .setType("text/plain")
                 .putExtra(Intent.EXTRA_TEXT, "Miren este sitio https://vm.tiktok.com/ZMprueba01/ #barranca");
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(intent)) {
-            exigir(escenario, "!!(window.Mappi && Mappi.listo) && Mappi.vista() === 'compartido'");
+            exigir(escenario, LISTO + " && Mappi.vista() === 'compartido'");
             exigir(escenario, "document.querySelector('.url-compartida').textContent.includes('vm.tiktok.com/ZMprueba01')");
             captura("video");
         }
@@ -138,7 +144,7 @@ public class MappiSmokeTest {
     public void avisaDeUnaVersionNueva() throws Exception {
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
             // Primero termina la consulta real a version.json, para que no pise el manifiesto de prueba.
-            exigir(escenario, "!!(window.Mappi && Mappi.listo) && Mappi.versionRevisada()");
+            exigir(escenario, LISTO + " && Mappi.versionRevisada()");
             assertEquals("\"" + BuildConfig.VERSION_NAME + "\"", evaluar(escenario, "Mappi.versionApp().nombre"));
             assertEquals(String.valueOf(BuildConfig.VERSION_CODE), evaluar(escenario, "Mappi.versionApp().codigo"));
             assertEquals("true", evaluar(escenario, "Mappi.probarManifiesto({version: '9.9', codigo: 999, "
@@ -153,7 +159,7 @@ public class MappiSmokeTest {
     @Test
     public void bloqueaServidoresNoPermitidos() throws Exception {
         try (ActivityScenario<MainActivity> escenario = ActivityScenario.launch(MainActivity.class)) {
-            exigir(escenario, "!!(window.Mappi && Mappi.listo)");
+            exigir(escenario, LISTO);
             evaluar(escenario, "fetch('https://example.com/').then(r => window.__prueba = 'status ' + r.status, () => window.__prueba = 'bloqueado')");
             exigir(escenario, "!!window.__prueba");
             assertEquals("\"bloqueado\"", evaluar(escenario, "window.__prueba"));

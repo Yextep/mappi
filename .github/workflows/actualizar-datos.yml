@@ -16,39 +16,59 @@ concurrency:
 jobs:
   actualizar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
       - name: Preparar Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Descargar Overture, OpenStreetMap y registro mercantil
+      - name: Instalar DuckDB y osmium
         run: |
           python -m pip install duckdb==1.5.6
-          python scripts/descargar_fuentes.py fuentes
-      - name: Unir las fuentes
-        run: python scripts/unir_fuentes.py fuentes datos/lugares.json docs/lugares.csv
-      - name: Revisar que la lista sea razonable
-        # Si una fuente falla a medias, es mejor no publicar que dejar la app con una lista recortada.
+          sudo apt-get update -q && sudo apt-get install -y -q osmium-tool
+      - name: Descargar las fuentes de toda Colombia
+        run: |
+          # Cada fuente por separado: si una falla, la revisión de abajo decide si se publica.
+          for fuente in overture divipola osm registro medellin; do
+            python scripts/descargar_fuentes.py fuentes "$fuente" || echo "::warning::No se pudo descargar $fuente"
+          done
+      - name: Armar un archivo por municipio
+        run: python scripts/armar_datos.py fuentes salida
+      - name: Revisar que los datos sean razonables
+        # Si una fuente falla a medias, es mejor dejar los datos del mes pasado que publicar unos recortados.
         run: |
           python - <<'PY'
           import json
-          d = json.load(open('datos/lugares.json', encoding='utf-8'))
-          n = len(d['lugares'])
-          print(f"{n} lugares, versión {d['version']}")
-          assert n >= 450, f'Solo {n} lugares: no se publica'
-          con_registro = sum(1 for l in d['lugares'] if l.get('registro'))
-          assert con_registro >= 100, f'Solo {con_registro} cruces con el registro mercantil: no se publica'
+          r = json.load(open('salida/resumen.json', encoding='utf-8'))
+          print(json.dumps(r, ensure_ascii=False, indent=1))
+          assert r['lugares'] >= 600000, f"Solo {r['lugares']} lugares: no se publica"
+          assert r['municipios_con_lugares'] >= 1000, 'Faltan municipios: no se publica'
+          assert r['por_fuente'].get('osm', 0) >= 100000, 'Falló OpenStreetMap: no se publica'
+          assert r['por_fuente'].get('medellin', 0) >= 100000, 'Falló Medellín: no se publica'
+          assert r['registro'].get('al_dia', 0) >= 50000, 'Falló el registro mercantil: no se publica'
           PY
-      - name: Publicar la lista
+      - name: Publicar en la rama «datos»
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Un solo commit, sin historia: la rama pesa lo mismo cada mes.
+          cd salida
+          git init -q -b datos
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add datos/lugares.json docs/lugares.csv
+          git add -A
+          git commit -q -m "Datos de $(python -c 'import json; print(json.load(open("indice.json"))["version"])')"
+          git push -q -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" datos
+      - name: Actualizar el índice incluido en el APK
+        run: |
+          cp salida/indice.json salida/limites.json datos/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add datos/
           if git diff --cached --quiet; then
-            echo "La lista no cambió."
+            echo "El índice no cambió."
             exit 0
           fi
-          git commit -m "Actualizar lugares ($(date -u +%Y-%m-%d))"
+          git commit -m "Actualizar el índice de municipios ($(date -u +%Y-%m-%d))"
           git push
