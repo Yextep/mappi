@@ -124,10 +124,6 @@ def clave(nombre):
     return " ".join(p for p in plano(nombre).split() if p not in VACIAS)
 
 
-def clave_sin_tipo(nombre):
-    return " ".join(p for p in plano(nombre).split() if p not in VACIAS and p not in TIPOS)
-
-
 def parece_persona(nombre):
     palabras = plano(nombre).split()
     return 2 <= len(palabras) <= 5 and sum(p in _NOMBRES_PERSONA for p in palabras) >= len(palabras) - 1 \
@@ -255,8 +251,26 @@ def cargar_lugares(con, fuentes):
         print(f"  {fuente}: {n} lugares dentro de un municipio")
 
 
+def reparar(texto):
+    """Arregla las tildes y eñes dañadas por una doble codificación: «CATALUÃ\\x91A» → «CATALUÑA»."""
+    for _ in range(2):  # algunas vienen dañadas dos veces: «PIÃÂ±A»
+        nuevo = re.sub(r"[\xc2\xc3][\x80-\xbf]", lambda m: m.group().encode("latin-1").decode("utf-8"), texto)
+        if nuevo == texto:
+            break
+        texto = nuevo
+    return texto
+
+
+# Nombres de relleno de Industria y Comercio de Medellín, que no son un negocio.
+SIN_NOMBRE = re.compile(r"(sin (establecimiento|nombre)|establecimiento ocasional|no (tiene|posee)|ninguno)\b")
+
+
 def lugar(fuente, id_, nombre, lat, lon, datos):
     d = json.loads(datos) if datos else {}
+    if fuente == "medellin":
+        nombre = reparar(nombre or "")
+        if SIN_NOMBRE.match(plano(nombre)):
+            return None
     l = {"id": id_, "nombre": " ".join(nombre.split())[:120], "lat": lat, "lon": lon, "fuentes": FUENTE_BIT[fuente],
          "fuente": fuente, "tel": "", "fb": "", "ig": "", "web": "", "wa": "", "dir": "", "cats": [], "ica": False,
          "ids": [id_], "origen": []}
@@ -309,24 +323,198 @@ def lugar(fuente, id_, nombre, lat, lon, datos):
         l["ica"] = True
         l["origen"] = [f"Medellín: CIIU {d.get('ciiu') or 'sin código'}"]
         l["conf"] = 0.7
-        barrio = (d.get("barrio") or "").strip()
+        barrio = reparar(d.get("barrio") or "").strip()
         l["dir"] = f"Barrio {barrio.title()}" if barrio and barrio != "0000" else ""
     if not l["nombre"] or len(clave(l["nombre"])) < 2:
         return None
     return l
 
 
-def mismo_lugar(a, b):
-    if distancia_m(a["lat"], a["lon"], b["lat"], b["lon"]) > 250:
+# ---------------------------------------------------------------- duplicados
+MARCAS = {"ara", "bancolombia", "d1", "davivienda", "efecty", "exito", "olimpica", "primax", "terpel", "texaco", "sena"}
+ROMANOS = {"ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x", "xi", "xii"}
+# Más palabras que no distinguen un negocio: formas de empresa, sedes, tipos que no están en las categorías y santos
+# («Papelería San Juan» no es «Esquina Verde San Juan»).
+COMUNES = {"sucursal", "sede", "principal", "municipal", "colombia", "corporacion", "fundacion", "asociacion", "grupo",
+           "sociedad", "union", "temporal", "consorcio", "company", "group", "comercial", "internacional", "educativa",
+           "educativo", "institucion", "ie", "ied", "salsamentaria", "legumbreria", "cigarreria", "chaza", "estadero",
+           "parador", "distribuciones", "soluciones", "ferretero", "apartamento", "apartamentos", "apto", "aptos",
+           "bodega", "general", "park", "san", "santa", "santo", "nuestra", "senora"}
+CAJERO = ["cajero", "cajeros", "atm", "corresponsal"]
+CENTRO_COMERCIAL = ["centro comercial", "cc", "c c", "mall", "plaza comercial", "pasaje comercial", "plaza minorista"]
+# Clase de sitio: si cada nombre dice una distinta, son sitios distintos aunque compartan el resto del nombre
+# («Alcaldía de Sibaté» y «Concejo de Sibaté», «Parque Gaitán» y «Biblioteca Gaitán»).
+CLASES = {p: clase for clase, palabras in {
+    "alcaldia": "alcaldia", "concejo": "concejo", "personeria": "personeria", "registraduria": "registraduria",
+    "policia": "policia cai", "fiscalia": "fiscalia", "juzgado": "juzgado juzgados tribunal", "notaria": "notaria",
+    "bomberos": "bomberos", "gobernacion": "gobernacion", "contraloria": "contraloria", "hospital": "hospital clinica ips ese",
+    "parque": "parque park", "cine": "cine cinema", "museo": "museo", "biblioteca": "biblioteca",
+    "deporte": "cancha canchas coliseo estadio polideportivo", "colegio": "colegio escuela institucion ied liceo",
+    "universidad": "universidad", "iglesia": "iglesia parroquia templo capilla catedral", "cementerio": "cementerio",
+    "vivienda": "urbanizacion conjunto edificio barrio", "hotel": "hotel hostal residencias", "cultura": "cultura",
+}.items() for p in palabras.split()}
+COMIDA_O_BAR = {"restaurante", "rapida", "cafe", "bar"}
+COMERCIO = {"mercado", "ropa", "hogar", "tecnologia", "papeleria", "ferreteria", "drogueria", "belleza", "mascotas",
+            "vehiculo", "tienda"}
+VIAS = [(r"\b(calle|cll|clle|cl|call)\b", "cl"), (r"\b(carrera|carera|cra|crr|cr|kra|kr|carr|k)\b", "kr"),
+        (r"\b(avenida|avda|av|ave)\b", "av"), (r"\b(diagonal|diag|dg)\b", "dg"),
+        (r"\b(transversal|transv|trans|tv|tr|trv)\b", "tv"), (r"\b(circular|circ|cq)\b", "cq")]
+
+
+def generica(palabra):
+    """Tipo de negocio, conector o letra suelta («restaurante», «supermercados», «de», «c»): no distingue un negocio."""
+    if palabra in MARCAS:
         return False
-    ka, kb = a["_clave"], b["_clave"]
-    if ka == kb:
+    if len(palabra) == 1:
         return True
-    sa, sb = a["_sin_tipo"], b["_sin_tipo"]
-    if sa and sa == sb and len(sa) >= 4:
+    return any(p in TIPOS or p in VACIAS or p in COMUNES for p in (palabra, palabra[:-1] if palabra.endswith("s") else "",
+                                                     palabra[:-2] if palabra.endswith("es") else ""))
+
+
+def coinciden(p, q):
+    """Misma palabra, quizá con un error de escritura: «broster» y «broaster», «santadereano» y «santandereano»."""
+    if p == q:
         return True
-    contenido = min(len(sa), len(sb)) >= 5 and (sa in sb or sb in sa)
-    return contenido or SequenceMatcher(None, ka, kb).ratio() >= 0.85
+    return min(len(p), len(q)) >= 5 and SequenceMatcher(None, p, q).ratio() >= 0.85
+
+
+def contenidas(corto, largo):
+    """Si cada palabra de corto tiene su pareja en largo."""
+    return all(p in largo or any(coinciden(p, q) for q in largo) for p in corto)
+
+
+def direccion_normalizada(texto):
+    """«Cl. 50 #51-59» y «Calle 50 No. 51 - 59» → «cl 50 51 59». None si no es una dirección con placa."""
+    t = re.sub(r"(\d)\s+([a-z])\b", r"\1\2", plano(texto))
+    for patron, abreviatura in VIAS:
+        t = re.sub(patron, abreviatura, t)
+    m = re.search(r"\b(cl|kr|av|dg|tv|cq)\s*(\d+[a-z]?)\s+(?:no |n |nro |numero )?(\d+[a-z]?)\s+(\d+)\b", t)
+    return " ".join(m.groups()) if m else None
+
+
+def contactos(l):
+    salida = set()
+    digitos = re.sub(r"\D", "", l["tel"] or "")
+    if len(digitos) >= 10:
+        salida.add("tel:" + digitos[-10:])
+    for campo in ("fb", "ig"):
+        u = re.sub(r"^https?://(www\.|m\.|web\.)?", "", (l[campo] or "").lower().split("?")[0].rstrip("/"))
+        if "/" in u and len(u) > 15:
+            salida.add(u)
+    return salida
+
+
+def preparar_union(por_municipio, nombres_municipio):
+    """Lo que necesita mismo_lugar: palabras que distinguen cada nombre, cuáles son raras en su municipio,
+    qué nombres son de cadena y qué teléfonos o páginas identifican un solo local."""
+    municipios_del_nombre = defaultdict(set)
+    municipios_del_contacto = defaultdict(set)
+    for codigo, lugares in por_municipio.items():
+        for l in lugares:
+            municipios_del_nombre[l["_clave"]].add(codigo)
+            l["_contactos"] = contactos(l)
+            for c in l["_contactos"]:
+                municipios_del_contacto[c].add(codigo)
+    for codigo, lugares in por_municipio.items():
+        # El nombre del municipio y del departamento tampoco distingue: «Alcaldía de Filadelfia», «Policía de Filadelfia».
+        del_lugar = set(plano(nombres_municipio.get(codigo, "")).split()) | set(
+            plano(DEPARTAMENTOS.get(codigo[:2], "")).split()) | {"colombia", "municipal", "sede", "sucursal"}
+        frecuencia = Counter(p for l in lugares for p in set(l["_clave"].split()))
+        en_municipio = Counter(c for l in lugares for c in l["_contactos"])
+        tope = 30 + len(lugares) / 2000
+        for l in lugares:
+            palabras = l["_clave"].split()
+            texto = f" {plano(l['nombre'])} "
+            # Números y letras sueltas suelen marcar la sede: «Sede 2», «Cordones L.R.».
+            l["_numeros"] = {p for p in palabras if p.isdigit() or p in ROMANOS or len(p) == 1}
+            l["_distintivas"] = {p for p in palabras if p not in l["_numeros"] and p not in del_lugar and not generica(p)}
+            l["_raras"] = {p for p in l["_distintivas"] if frecuencia[p] <= tope and (len(p) >= 4 or p in MARCAS)}
+            menor = min((frecuencia[p] for p in l["_distintivas"]), default=0)
+            l["_mas_raras"] = {p for p in l["_distintivas"] if frecuencia[p] == menor or frecuencia[p] <= 5}
+            l["_unicas"] = {p for p in l["_distintivas"] if frecuencia[p] <= 5}
+            l["_cadena"] = len(municipios_del_nombre[l["_clave"]]) >= 5
+            l["_clases"] = {CLASES[p] for p in palabras if p in CLASES}
+            l["_cat_nombre"] = categoria_por_nombre(l["nombre"])
+            l["_cajero"] = any(f" {p} " in texto for p in CAJERO)
+            l["_cc"] = any(f" {p} " in texto for p in CENTRO_COMERCIAL)
+            l["_direccion"] = direccion_normalizada(l["dir"])
+            # Un teléfono o una página que aparece en varios municipios es de una cadena: no identifica el local.
+            l["_contactos"] = {c for c in l["_contactos"] if len(municipios_del_contacto[c]) <= 2 and en_municipio[c] <= 4}
+            l["_buscar"] = sorted(l["_distintivas"] or set(palabras), key=lambda p: frecuencia[p])[:4]
+
+
+def categorias_compatibles(a, b):
+    return (a == b or "servicios" in (a, b) or (a in COMIDA_O_BAR and b in COMIDA_O_BAR)
+            or ("tienda" in (a, b) and a in COMERCIO and b in COMERCIO))
+
+
+def mismo_lugar(a, b, comun_en_la_zona):
+    """Si a y b son el mismo negocio. comun_en_la_zona(palabra) dice si muchos nombres cercanos la llevan: suele ser
+    el barrio o la calle («Laureles», «Gaitán»), que no sirve para reconocer un negocio."""
+    dist = distancia_m(a["lat"], a["lon"], b["lat"], b["lon"])
+    if dist > 300:
+        return False
+    # Frenos: lo que dice el nombre muestra que son sitios distintos aunque se llamen parecido.
+    otro_numero = a["_numeros"] and b["_numeros"] and a["_numeros"] != b["_numeros"]
+    if otro_numero and dist > 25:
+        return False  # «Dulces Sueños 1» y «Dulces Sueños 2», «Granero La 49» y «Granero La 53», «Cordones L.R.» y «S.P.»
+    if a["_cajero"] != b["_cajero"]:
+        return False  # el cajero no es el banco
+    if a["_clases"] and b["_clases"] and a["_clases"] != b["_clases"]:
+        return False  # «Alcaldía de Sibaté» y «Concejo de Sibaté», «Iglesia Santa Lucía» y «Parque Iglesia Santa Lucía»
+    na, nb = a["_cat_nombre"], b["_cat_nombre"]
+    if na and nb and na != nb and not {na, nb} <= COMIDA_O_BAR:
+        return False  # «Parqueadero La Curva» y «Bar La Curva», «Asesor de Seguros» y «Spa Asesoría»
+    da, db = a["_distintivas"], b["_distintivas"]
+    if a["_cc"] != b["_cc"]:  # un local no es el centro comercial donde está, salvo que sea solo su nombre
+        local, centro = (a, b) if b["_cc"] else (b, a)
+        if not local["_distintivas"] or not contenidas(local["_distintivas"], centro["_distintivas"]):
+            return False
+    cadena = a["_cadena"] or b["_cadena"]
+    radio = 25 if not (da or db) else 60 if cadena else 250
+    misma_categoria = categorias_compatibles(a["cat"], b["cat"]) or (na and na == nb)
+    if a["_clave"].replace(" ", "") == b["_clave"].replace(" ", ""):  # también «Litocolor» y «Lito Color»
+        if not a["_raras"]:
+            radio = min(radio, 60)  # dos «Bordados» a 160 m son dos talleres
+        return dist <= 50 or (dist <= radio and misma_categoria)
+    if a["_clases"] == b["_clases"] and a["_clases"] and not otro_numero and dist <= 50 and contenidas(da, db) and \
+            contenidas(db, da):
+        return True  # «Alcaldía Municipal» y «Alcaldía Municipal de Jesús María», «Estación VII de Policía de Bosa»
+    if not da and not db:  # «Supermercados La 80» y «Supermercado La 80», pero no «Restaurante La 74» y «La 76»
+        return dist <= 25 and not otro_numero and a["cat"] == b["cat"] and \
+            SequenceMatcher(None, a["_clave"], b["_clave"]).ratio() >= 0.9
+    corto, largo = sorted((da, db), key=len)
+    if not corto or not contenidas(corto, largo):
+        return False
+    # Las palabras que distinguen al nombre más corto están en el otro: «Kabuki Cocina Japonesa» y
+    # «Kabuki Cocina Peruana y Japonesa». Falta que alguna sea rara, para no unir «Sabor a Mar» y «Mar y Sabor».
+    raras = {p for p in corto if (p in a["_raras"] or p in b["_raras"]) and not comun_en_la_zona(p)}
+    if a["_contactos"] & b["_contactos"]:
+        return bool(raras) or len(corto) >= 2
+    iguales = contenidas(largo, corto)
+    if iguales and len(corto) >= 2 and dist <= 15 and a["cat"] == b["cat"]:
+        return True  # en el mismo punto: «Hotel y Residencias Sol y Luna» y «Hotel Sol & Luna»
+    if not raras:
+        return False
+    # Una palabra que casi nadie más usa, en el mismo punto, pesa más que la categoría (que a veces viene mal):
+    # «Fermad» y «Fondo de Empleados Fermad», «Gurmetcindo» y «Gurmetcindo Plaza Mayor».
+    casi_unica = dist <= 25 and corto & (a["_unicas"] | b["_unicas"])
+    if not (iguales or casi_unica or misma_categoria):
+        return False  # «Crepes & Waffles Museo de Arte Moderno» no es el museo
+    if len(corto) == 1:
+        if not (casi_unica or a["cat"] == b["cat"] or {a["cat"], b["cat"]} <= COMIDA_O_BAR):
+            return False  # «Droguería La Oriental» y «Variedades La Oriental»
+        # La palabra compartida debe ser la que más distingue al nombre largo: «Los Chamos» y «Los Chamos Arepas
+        # Venezolanas» sí; «Medellín Creativa» y «La Puerta Creativa» no.
+        dueno_largo = a if a["_distintivas"] is largo else b
+        if not any(coinciden(p, q) for p in corto for q in dueno_largo["_mas_raras"]):
+            return False
+    solo_marca = corto <= MARCAS
+    if a["_direccion"] and a["_direccion"] == b["_direccion"] and not solo_marca:
+        return True
+    if dist <= 50:
+        return True
+    return (len(corto) >= 2 or (iguales and len(min(corto)) >= 5)) and dist <= (60 if cadena or solo_marca else 120)
 
 
 def fusionar(base, otro):
@@ -343,36 +531,61 @@ def fusionar(base, otro):
     base["origen"] += otro["origen"]
     base["ica"] = base["ica"] or otro["ica"]
     base["conf"] = max(base.get("conf", 0), otro.get("conf", 0))
+    base["_contactos"] |= otro["_contactos"]
+    base["_direccion"] = base["_direccion"] or otro["_direccion"]
 
 
 def deduplicar(lugares):
-    """Une el mismo negocio visto en varias fuentes. Bloquea por celdas de ~250 m y por las palabras raras del nombre."""
-    frecuencia = Counter(p for l in lugares for p in set(l["_sin_tipo"].split() or l["_clave"].split()))
-    indice = defaultdict(list)
+    """Une el mismo negocio visto varias veces, en una fuente o en varias. Los candidatos son los lugares a menos
+    de ~500 m que comparten una palabra rara del nombre, y los que tienen el mismo teléfono, página o dirección.
+    Un lugar se compara con todo lo que ya se unió en cada grupo: si A es B y B es C, los tres quedan juntos."""
+    def celda_de(l):
+        return round(l["lat"] / 0.0025), round(l["lon"] / 0.0025)
+
+    nombres_por_celda = defaultdict(set)
+    for l in lugares:
+        nombres_por_celda[celda_de(l)].add(l["_clave"])
+    palabras_por_celda = {c: Counter(p for n in nombres for p in set(n.split())) for c, nombres in nombres_por_celda.items()}
+    vacio = Counter()
+    por_palabra = defaultdict(list)
+    por_dato = defaultdict(list)
+    miembros = {}
+
+    def indexar(l, grupo):
+        cx, cy = celda_de(l)
+        for p in l["_buscar"]:
+            por_palabra[(cx, cy, p)].append(grupo)
+        for k in list(l["_contactos"]) + ([l["_direccion"]] if l["_direccion"] else []):
+            por_dato[k].append(grupo)
+
     salida = []
     for l in sorted(lugares, key=lambda x: (PRIORIDAD[x["fuente"]], -x.get("conf", 0))):
-        palabras = sorted(set(l["_sin_tipo"].split() or l["_clave"].split()), key=lambda p: frecuencia[p])[:2]
-        celda = (round(l["lat"] / 0.0025), round(l["lon"] / 0.0025))
-        igual = None
-        for p in palabras:
-            for dx in (-1, 0, 1):
-                for dy in (-1, 0, 1):
-                    for otro in indice.get((celda[0] + dx, celda[1] + dy, p), ()):
-                        if mismo_lugar(otro, l):
-                            igual = otro
-                            break
-                    if igual:
-                        break
-                if igual:
+        cx, cy = celda_de(l)
+        zona = [palabras_por_celda.get((cx + dx, cy + dy), vacio) for dx in (-1, 0, 1) for dy in (-1, 0, 1)]
+
+        def comun_en_la_zona(p, zona=zona):
+            return sum(c[p] for c in zona) >= 8
+
+        datos = list(l["_contactos"]) + ([l["_direccion"]] if l["_direccion"] else [])
+        candidatos = [o for p in l["_buscar"] for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                      for o in por_palabra.get((cx + dx, cy + dy, p), ())]
+        candidatos += [o for k in datos for o in por_dato.get(k, ())]
+        igual, vistos = None, set()
+        for o in candidatos:
+            if id(o) not in vistos:
+                vistos.add(id(o))
+                if distancia_m(o["lat"], o["lon"], l["lat"], l["lon"]) <= 300 and \
+                        any(mismo_lugar(m, l, comun_en_la_zona) for m in miembros[id(o)]):
+                    igual = o
                     break
-            if igual:
-                break
         if igual:
             fusionar(igual, l)
+            miembros[id(igual)].append(l)
+            indexar(l, igual)
             continue
         salida.append(l)
-        for p in palabras:
-            indice[(celda[0], celda[1], p)].append(l)
+        miembros[id(l)] = [l]
+        indexar(l, l)
     return salida
 
 
@@ -513,11 +726,13 @@ def construir(fuentes):
         if l["fuente"] == "overture" and l["conf"] < 0.2:
             descartados["overture_baja_confianza"] += 1
             continue
-        l["_clave"], l["_sin_tipo"] = clave(l["nombre"]), clave_sin_tipo(l["nombre"])
+        l["_clave"] = clave(l["nombre"])
         por_municipio[fila[6]].append(l)
     print("descartados:", dict(descartados))
     con.execute("DROP TABLE crudo; DROP TABLE ubicado;")
 
+    nombres = dict(con.execute("SELECT codigo, nombre FROM municipio").fetchall())
+    preparar_union(por_municipio, nombres)
     for codigo in por_municipio:
         por_municipio[codigo] = deduplicar(por_municipio[codigo])
     centros = {c: (x, y) for c, x, y in con.execute("SELECT codigo, cx, cy FROM municipio").fetchall()}
