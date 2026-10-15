@@ -1,0 +1,36 @@
+# Lugares que aparecen en Restaurant Guru o TripAdvisor (primera página, revisada el 2026-10-15)
+# pero no en Overture ni en OpenStreetMap. Falta su ubicación para poder agregarlos al mapa.
+# Restaurant Guru
+Centro Cultural Horizonte
+Cevibeers
+La Jugada de Leo torcoroma
+Quicio - Capricho's Pizzería Barrancabermeja
+Angel's Cake Pastelería
+El Parche Express
+La guachera food
+Barranca wok
+Comida Rapida La Perrada De Samuel
+ASADERO BROASTER & BRASAS DE LA 52
+EL PUNTO DE ZOILA
+Arepazo Food
+Pizzaburguer restaurante
+Pesquera del Mar
+Los Acomodados
+Cevicheria-shrimp
+Bennie Briscoe
+Restaurante Rodizio Sete
+La Piazzeta
+Pizza al parque
+IMPASTO'D'ITALIA
+LA PIZZA LOKA
+Mamma Mia Barrancabermeja
+Pizzería Artesanal Duros
+Pizzeria bugs bunny Barrancabermeja
+Jose Sosa
+Pizzeria Bam Bam
+Piolín Pizzería
+# TripAdvisor
+Restaurante El Buitron
+La maison Francaise
+Sky bar cafe
+Restaurante Isla De Los Mangos

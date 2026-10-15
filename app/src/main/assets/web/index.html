@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://tiles.openfreemap.org; connect-src 'self' https://raw.githubusercontent.com https://tiles.openfreemap.org; worker-src blob:; child-src blob:; object-src 'none'; base-uri 'none'">
+<meta name="color-scheme" content="light dark">
+<title>Mappi</title>
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-lupa" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.8-4.8"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="i-filtro" viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></symbol>
+  <symbol id="i-ubicar" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></symbol>
+  <symbol id="i-mas" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-atras" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-corazon" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-9.2-9.3C1.7 7.5 3.9 4.5 7.1 4.5c2 0 3.6 1.1 4.9 2.9 1.3-1.8 2.9-2.9 4.9-2.9 3.2 0 5.4 3 4.3 6.2C19.5 15.4 12 20 12 20z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M4.5 12.5l5 5 10-11"/></symbol>
+  <symbol id="i-ruta" viewBox="0 0 24 24"><path d="M3 11.5 21 3l-8.5 18-2.2-7.3z"/></symbol>
+  <symbol id="i-tel" viewBox="0 0 24 24"><path d="M6.6 3.5h3l1.5 4.2-2 1.4a12 12 0 0 0 5.8 5.8l1.4-2 4.2 1.5v3a2 2 0 0 1-2.2 2A17 17 0 0 1 4.6 5.7a2 2 0 0 1 2-2.2z"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 20l1.3-3.9A8.5 8.5 0 1 1 8 19z"/></symbol>
+  <symbol id="i-enlace" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-6.5-6.1-6.5-11a6.5 6.5 0 0 1 13 0c0 4.9-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></symbol>
+  <symbol id="i-copiar" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></symbol>
+</svg>
+
+<div id="mapa" aria-label="Mapa de lugares de comida"></div>
+
+<header class="barra">
+  <form class="busqueda" id="form-busqueda" role="search">
+    <svg class="icono icono-lupa"><use href="#i-lupa"/></svg>
+    <input id="q" type="search" placeholder="Busca un plato o un lugar" autocomplete="off" enterkeyhint="search" aria-label="Buscar un plato o un lugar">
+    <button type="button" id="limpiar" class="boton-icono" aria-label="Borrar búsqueda" hidden><svg class="icono"><use href="#i-x"/></svg></button>
+    <button type="button" id="abrir-menu" class="boton-icono" aria-label="Datos, respaldo y lugares ocultos"><svg class="icono"><use href="#i-menu"/></svg></button>
+  </form>
+  <div class="chips" id="chips-platos" aria-label="Platos"></div>
+</header>
+
+<div class="flotantes">
+  <button type="button" id="agregar" class="flotante" aria-label="Agregar un lugar que no está en el mapa"><svg class="icono"><use href="#i-mas"/></svg></button>
+  <button type="button" id="ubicarme" class="flotante" aria-label="Ir a mi ubicación"><svg class="icono"><use href="#i-ubicar"/></svg></button>
+</div>
+
+<div id="mira" class="mira" hidden aria-hidden="true"><svg class="icono"><use href="#i-pin"/></svg></div>
+
+<section class="hoja" id="hoja" data-vista="resumen" aria-live="polite">
+  <button type="button" class="hoja-asa" id="asa" aria-label="Mostrar u ocultar la lista"><span></span></button>
+  <div id="hoja-contenido"></div>
+</section>
+
+<div id="aviso" class="aviso" role="status" hidden></div>
+
+<input type="file" id="archivo-respaldo" accept="application/json,.json" hidden>
+
+<script src="vendor/maplibre-gl.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

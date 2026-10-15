@@ -1,0 +1,12 @@
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
+*.p12
+fuentes/
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+docs/*.png
