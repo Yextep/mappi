@@ -12,6 +12,7 @@ Uso: python descargar_fuentes.py CARPETA [fuente ...]   (fuentes: overture osm d
 """
 import concurrent.futures
 import csv
+import http.client
 import io
 import json
 import os
@@ -33,7 +34,8 @@ def descargar(url, intentos=5, espera=20):
         try:
             with urllib.request.urlopen(req, timeout=300) as r:
                 return r.read()
-        except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
+        # IncompleteRead (http.client.HTTPException): datos.gov.co a veces corta una página a la mitad.
+        except (urllib.error.URLError, http.client.HTTPException, TimeoutError, ConnectionError) as e:
             codigo = getattr(e, "code", None)
             if (codigo is not None and codigo not in (408, 429, 500, 502, 503, 504)) or intento == intentos:
                 raise
@@ -136,7 +138,9 @@ def registro(salida):
             {"$select": campos, "$where": filtro, "$order": ":id", "$limit": pagina, "$offset": desde})).decode("utf-8")
 
     n = 0
-    with open(f"{salida}/registro.csv", "w", encoding="utf-8", newline="") as f, \
+    # Se escribe aparte y se renombra al final: un archivo a medias nunca queda como si estuviera completo.
+    temporal = f"{salida}/registro.csv.parcial"
+    with open(temporal, "w", encoding="utf-8", newline="") as f, \
             concurrent.futures.ThreadPoolExecutor(4) as hilos:
         escritor = csv.writer(f)
         escritor.writerow(campos.split(","))
@@ -145,7 +149,9 @@ def registro(salida):
             escritor.writerows(filas)
             n += len(filas)
     if n < total * 0.98:
+        os.remove(temporal)
         sys.exit(f"Registro mercantil incompleto: {n} de {total}")
+    os.replace(temporal, f"{salida}/registro.csv")
     print(f"Registro mercantil desde {anio}: {n} matrículas")
 
 
