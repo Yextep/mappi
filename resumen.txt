@@ -1,0 +1,5 @@
+versión: 2026-11-05
+lugares: 988448 en 1121 municipios
+por categoría: servicios 188661, restaurante 75111, educacion 63144, mercado 57925, ropa 53528, vehiculo 48625, tienda 48456, belleza 48009, salud 43415, hotel 42607, cafe 36579, bar 28260, ocio 27499, rapida 25461, transporte 23186, gobierno 22005, deporte 21746, iglesia 21520, hogar 18806, banco 16995, tecnologia 16684, drogueria 16674, ferreteria 16446, papeleria 12979, mascotas 10059, gasolina 4068
+registro: sin registro 700858, al_dia 139967, cancelado 99473, sin_renovar 48150
+más grandes: Medellín 327734 (9082 KB), Bogotá D.C. 159857 (7615 KB), Cali 42213 (2259 KB), Barranquilla 20268 (1048 KB), Bucaramanga 18529 (995 KB), Cartagena 15402 (770 KB), Cúcuta 15310 (745 KB), Villavicencio 12430 (659 KB)
